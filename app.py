@@ -78,10 +78,27 @@ _MLABEL = {1:"Jan",2:"Feb",3:"Mar",4:"Apr",5:"May",6:"Jun",
 # CROP YEAR HELPERS  (fully dynamic on start_month)
 # -------------------------------------------------------
 def crop_label(dt, sm):
-    """dt=Timestamp, sm=start month int. Returns '15/16' style label."""
+    """dt=Timestamp, sm=start month int.
+    January start  -> full year label '2016', '2017' ...
+    Any other start -> '15/16', '16/17' ... style label.
+    """
+    if sm == 1:
+        return str(dt.year)
     if dt.month >= sm:
         return f"{dt.year % 100:02d}/{(dt.year+1) % 100:02d}"
     return f"{(dt.year-1) % 100:02d}/{dt.year % 100:02d}"
+
+
+def _cy_sort_key(cy, sm):
+    """Sortable integer from a crop year label regardless of format."""
+    if sm == 1:
+        return int(cy)
+    return int(cy.split("/")[1])
+
+
+def _min_cy(sm):
+    """Minimum crop year label to keep (drops sparse early years)."""
+    return "2016" if sm == 1 else "15/16"
 
 
 def crop_xdate(dt, sm):
@@ -156,7 +173,7 @@ def process_prcp(raw: pd.DataFrame, today: pd.Timestamp, sm: int):
     )
     real_daily["cumulative_prcp"] = real_daily.groupby(
         ["region", "crop_year"])["prcp_avg"].cumsum()
-    real_daily = real_daily[real_daily["crop_year"] >= "15/16"].copy()
+    real_daily = real_daily[real_daily["crop_year"] >= _min_cy(sm)].copy()
 
     df_normals["month"] = df_normals["date"].str[:2].astype(int)
     df_normals["day"]   = df_normals["date"].str[3:].astype(int)
@@ -169,8 +186,7 @@ def process_prcp(raw: pd.DataFrame, today: pd.Timestamp, sm: int):
     )
     normals_daily["cumulative_prcp"] = normals_daily.groupby("region")["prcp_avg"].cumsum()
 
-    def _cy_end(cy): return int(cy.split("/")[1])
-    cys_sorted = sorted(real_daily["crop_year"].unique(), key=_cy_end)
+    cys_sorted = sorted(real_daily["crop_year"].unique(), key=lambda cy: _cy_sort_key(cy, sm))
     cy_colors  = {cy: CROP_COLOR_PALETTE[i] if i < len(CROP_COLOR_PALETTE) else INK_4
                   for i, cy in enumerate(reversed(cys_sorted))}
     latest_cy  = cys_sorted[-1] if cys_sorted else None
@@ -219,7 +235,7 @@ def process_temp(raw: pd.DataFrame, today: pd.Timestamp, sm: int):
     )
     for col in ["tmin_avg", "tmax_avg"]:
         if col not in real_daily.columns: real_daily[col] = pd.NA
-    real_daily = real_daily[real_daily["crop_year"] >= "15/16"].copy()
+    real_daily = real_daily[real_daily["crop_year"] >= _min_cy(sm)].copy()
 
     df_normals["month"] = df_normals["date"].str[:2].astype(int)
     df_normals["day"]   = df_normals["date"].str[3:].astype(int)
@@ -260,7 +276,7 @@ def process_harmattan(raw_temp: pd.DataFrame, today: pd.Timestamp, sm: int):
         .sort_values("xdate")
     )
     daily["spread"] = daily["tmax_avg"] - daily["tmin_avg"]
-    daily = daily[daily["crop_year"] >= "15/16"].copy()
+    daily = daily[daily["crop_year"] >= _min_cy(sm)].copy()
     return daily
 
 
