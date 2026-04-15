@@ -491,7 +491,8 @@ def build_precip_anomaly(real_daily, normals_daily, region, cys_sorted, cy_color
     return fig
 
 
-def build_monthly_boxplot(real_daily, normals_daily, region, latest_cy, sm):
+def build_monthly_boxplot(real_daily, normals_daily, region, latest_cy, sm,
+                          avg_df=None, avg_label="", avg_color=AVG_5Y_COLOR):
     df_r = real_daily[real_daily["region"] == region].copy()
     df_n = normals_daily[normals_daily["region"] == region].copy()
     mo   = crop_month_order(sm)
@@ -515,6 +516,18 @@ def build_monthly_boxplot(real_daily, normals_daily, region, latest_cy, sm):
     fig.add_trace(go.Scatter(x=normals_m["month_label"], y=normals_m["prcp_avg"],
         mode="lines", name="Normal (Maxar)",
         line=dict(color=INK_4, width=2, dash="dash")))
+    if avg_df is not None:
+        d = avg_df[avg_df["region"] == region].copy()
+        d["month"] = d["xdate"].dt.month
+        avg_m = d.groupby("month")["prcp_avg"].sum().reset_index()
+        avg_m["month_label"] = avg_m["month"].map(_MLABEL)
+        avg_m["month_order"] = avg_m["month"].map({m: i for i, m in enumerate(mo)})
+        avg_m = avg_m.sort_values("month_order")
+        if not avg_m.empty:
+            fig.add_trace(go.Scatter(x=avg_m["month_label"], y=avg_m["prcp_avg"],
+                mode="lines", name=avg_label,
+                line=dict(color=avg_color, width=2.5, dash="dashdot"),
+                hovertemplate=f"<b>{avg_label}</b>  %{{x}}  %{{y:.1f}} mm<extra></extra>"))
     layout = _base_layout(f"Monthly Precip Distribution ({region})", "mm")
     layout["xaxis"]["categoryorder"] = "array"
     layout["xaxis"]["categoryarray"] = [_MLABEL[m] for m in mo]
@@ -838,7 +851,7 @@ def render_origin_tab(origin_name, today, avg_option, sm):
                     use_container_width=True, key=f"dry_{origin_name}_{region}")
             with cb:
                 st.plotly_chart(build_monthly_boxplot(real_daily, normals_daily, region,
-                    latest_cy, sm),
+                    latest_cy, sm, avg_cum, avg_label, avg_color),
                     use_container_width=True, key=f"box_{origin_name}_{region}")
                 st.markdown(_BOX_EXPLANATION, unsafe_allow_html=True)
                 st.plotly_chart(build_wet_days(real_daily, region, cys_sorted, cy_colors,
